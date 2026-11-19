@@ -21,16 +21,6 @@ ESTADO_PATH = os.path.join(os.path.dirname(__file__), "ahorcado_estado.json")
 TECLADO = list("ABCDEFGHIJKLMNÑOPQRSTUVWXYZ") + ["Á", "É", "Ó"]
 COLUMNAS_TECLADO = 6
 
-DIBUJO = [
-    "\n  +---+\n  |   |\n      |\n      |\n      |\n      |\n=========",
-    "\n  +---+\n  |   |\n  O   |\n      |\n      |\n      |\n=========",
-    "\n  +---+\n  |   |\n  O   |\n  |   |\n      |\n      |\n=========",
-    "\n  +---+\n  |   |\n  O   |\n /|   |\n      |\n      |\n=========",
-    "\n  +---+\n  |   |\n  O   |\n /|\\  |\n      |\n      |\n=========",
-    "\n  +---+\n  |   |\n  O   |\n /|\\  |\n /    |\n      |\n=========",
-    "\n  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n=========",
-]
-
 ESTADO_INICIAL = {
     "estado": "esperando",   # esperando | jugando | ganado | perdido
     "palabra": "",
@@ -41,25 +31,36 @@ ESTADO_INICIAL = {
     "quien_letra": {},       # letra -> jugador que la dijo
 }
 
-# CSS para que el teclado se vea en cuadrícula de 6 columnas también en el móvil
+# CSS para que todo quepa en una pantalla de móvil, sin deslizar, y el teclado
+# se vea siempre en cuadrícula de 6 columnas (Streamlit apila las columnas en
+# pantallas estrechas si no se fuerza).
 CSS_TECLADO = """
 <style>
-@media (max-width: 700px) {
-  .st-key-teclado [data-testid="stHorizontalBlock"] {
-      flex-direction: row !important;
-      flex-wrap: nowrap !important;
-      gap: 0.25rem !important;
-  }
-  .st-key-teclado [data-testid="column"] {
-      width: calc(100% / 6) !important;
-      flex: 0 0 calc(100% / 6) !important;
-      min-width: 0 !important;
-  }
-  .st-key-teclado button {
-      padding: 0.2rem 0 !important;
-      font-size: 0.85rem !important;
-      min-height: 2.1rem !important;
-  }
+.block-container {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"] { gap: 0.1rem !important; }
+.st-key-teclado [data-testid="stHorizontalBlock"] {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 0.2rem !important;
+}
+.st-key-teclado [data-testid="column"] {
+    width: calc(100% / 6) !important;
+    flex: 0 0 calc(100% / 6) !important;
+    min-width: 0 !important;
+}
+.st-key-teclado button {
+    padding: 0.1rem 0 !important;
+    font-size: 0.8rem !important;
+    min-height: 1.8rem !important;
+    height: 1.8rem !important;
+}
+.st-key-teclado p { font-size: 0.75rem !important; line-height: 1 !important; }
+@media (max-width: 480px) {
+  h1 { font-size: 1.3rem !important; }
+  h2 { font-size: 1.1rem !important; }
 }
 </style>
 """
@@ -109,14 +110,14 @@ def adivinadores(proponente):
 
 
 # ---------- quién soy ----------
-st.title("🪢 Ahorcado en familia")
 st.markdown(CSS_TECLADO, unsafe_allow_html=True)
+st.markdown("### 🪢 Ahorcado en familia")
 
 if "yo" not in st.session_state:
     st.session_state.yo = None
 
 if st.session_state.yo is None:
-    st.subheader("¿Quién eres?")
+    st.write("¿Quién eres?")
     cols = st.columns(3)
     for col, nombre in zip(cols, JUGADORES):
         if col.button(f"{ICONOS[nombre]} {nombre}", use_container_width=True):
@@ -125,18 +126,19 @@ if st.session_state.yo is None:
     st.stop()
 
 yo = st.session_state.yo
-st.caption(f"Has entrado como **{ICONOS[yo]} {yo}**")
-if st.button("🔄 Cambiar de jugador", key="cambiar_jugador"):
-    st.session_state.yo = None
-    st.rerun()
 
 if AUTOREFRESH:
     st_autorefresh(interval=2000, key="autorefresh_ahorcado")
-else:
-    st.button("🔄 Actualizar")
+
+c1, c2 = st.columns([3, 1])
+c1.caption(f"Eres **{ICONOS[yo]} {yo}**")
+if c2.button("🔄 Salir", key="cambiar_jugador", use_container_width=True):
+    st.session_state.yo = None
+    st.rerun()
+if not AUTOREFRESH:
+    st.button("🔄 Actualizar", use_container_width=True)
 
 estado = leer_estado()
-st.divider()
 
 # ---------- fase: esperando palabra ----------
 if estado["estado"] == "esperando":
@@ -174,10 +176,9 @@ else:
     turno = estado["turno"]
     quien_letra = estado["quien_letra"]
 
-    st.markdown(f"Palabra propuesta por {ICONOS.get(proponente, '')} **{proponente}**")
-    st.code(DIBUJO[min(fallos, MAX_FALLOS)], language=None)
+    vidas = "❤️" * (MAX_FALLOS - fallos) + "💀" * fallos
+    st.caption(f"Palabra de {ICONOS.get(proponente, '')} {proponente}  ·  {vidas}")
     st.markdown(f"## {mascara(palabra, letras)}")
-    st.caption(f"Fallos: {fallos} / {MAX_FALLOS}")
 
     if estado["estado"] == "jugando" and completada(palabra, letras):
         estado["estado"] = "ganado"
@@ -187,13 +188,6 @@ else:
         estado["estado"] = "perdido"
         guardar_estado(estado)
         st.rerun()
-
-    # ---- quién ha acertado qué letra ----
-    aciertos = [(l, quien_letra[l]) for l in letras if l in quien_letra and l in palabra]
-    if aciertos:
-        st.markdown(
-            "**Aciertos:** " + "  ·  ".join(f"{l} {ICONOS.get(j, '')} {j}" for l, j in aciertos)
-        )
 
     if estado["estado"] == "ganado":
         st.success(f"🎉 ¡Habéis adivinado **{palabra}**!")
@@ -206,15 +200,15 @@ else:
             guardar_estado(dict(ESTADO_INICIAL))
             st.rerun()
     elif yo == proponente:
-        st.info(f"Tú has puesto la palabra. Ahora le toca adivinar a {ICONOS.get(turno, '')} **{turno}**.")
-        if st.button("❌ Cancelar esta partida"):
+        st.caption(f"Le toca adivinar a {ICONOS.get(turno, '')} **{turno}**")
+        if st.button("❌ Cancelar esta partida", use_container_width=True):
             guardar_estado(dict(ESTADO_INICIAL))
             st.rerun()
     else:
         if yo == turno:
-            st.success("👉 Es tu turno, elige una letra:")
+            st.caption("👉 Es tu turno")
         else:
-            st.warning(f"Espera tu turno: ahora le toca a {ICONOS.get(turno, '')} **{turno}**.")
+            st.caption(f"Espera, le toca a {ICONOS.get(turno, '')} **{turno}**")
 
         with st.container(key="teclado"):
             filas = [TECLADO[i:i + COLUMNAS_TECLADO] for i in range(0, len(TECLADO), COLUMNAS_TECLADO)]
