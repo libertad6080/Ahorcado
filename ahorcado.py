@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import unicodedata
 
 import streamlit as st
 
@@ -17,9 +18,16 @@ ICONOS = {"Isabel": "👧", "Mami": "👩", "Papi": "👨"}
 MAX_FALLOS = 6
 ESTADO_PATH = os.path.join(os.path.dirname(__file__), "ahorcado_estado.json")
 
-# 6 columnas x 5 filas = 30 teclas
-TECLADO = list("ABCDEFGHIJKLMNÑOPQRSTUVWXYZ") + ["Á", "É", "Ó"]
+# 27 teclas sin tildes (Ñ incluida), en cuadrícula de 6 columnas
+TECLADO = list("ABCDEFGHIJKLMNÑOPQRSTUVWXYZ")
 COLUMNAS_TECLADO = 6
+
+
+def sin_tilde(texto):
+    """Quita tildes para poder adivinar p.ej. CAFÉ pulsando la E."""
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c)
+    )
 
 ESTADO_INICIAL = {
     "estado": "esperando",   # esperando | jugando | ganado | perdido
@@ -32,19 +40,26 @@ ESTADO_INICIAL = {
 }
 
 # CSS para que todo quepa en una pantalla de móvil, sin deslizar, y el teclado
-# se vea siempre en cuadrícula de 6 columnas (Streamlit apila las columnas en
-# pantallas estrechas si no se fuerza).
+# se vea siempre en cuadrícula de 6 columnas (Streamlit apila las columnas y
+# añade huecos grandes entre bloques si no se fuerza lo contrario).
 CSS_TECLADO = """
 <style>
 .block-container {
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
+    padding-top: 0.6rem !important;
+    padding-bottom: 0.6rem !important;
 }
-div[data-testid="stVerticalBlockBorderWrapper"] { gap: 0.1rem !important; }
+/* menos espacio entre TODOS los bloques de la página */
+[data-testid="stVerticalBlock"] { gap: 0.25rem !important; }
+div[data-testid="element-container"] { margin-bottom: 0 !important; }
+h3 { margin: 0 0 0.2rem 0 !important; }
+
+/* teclado: cuadrícula fija de 6 columnas, sin huecos entre filas ni teclas */
+.st-key-teclado [data-testid="stVerticalBlock"] { gap: 0 !important; }
 .st-key-teclado [data-testid="stHorizontalBlock"] {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
-    gap: 0.2rem !important;
+    gap: 0.15rem !important;
+    margin-bottom: 0.1rem !important;
 }
 .st-key-teclado [data-testid="column"] {
     width: calc(100% / 6) !important;
@@ -52,15 +67,21 @@ div[data-testid="stVerticalBlockBorderWrapper"] { gap: 0.1rem !important; }
     min-width: 0 !important;
 }
 .st-key-teclado button {
-    padding: 0.1rem 0 !important;
-    font-size: 0.8rem !important;
-    min-height: 1.8rem !important;
-    height: 1.8rem !important;
+    padding: 0 !important;
+    font-size: 0.85rem !important;
+    min-height: 1.7rem !important;
+    height: 1.7rem !important;
+    line-height: 1.7rem !important;
 }
-.st-key-teclado p { font-size: 0.75rem !important; line-height: 1 !important; }
+.st-key-teclado [data-testid="stMarkdownContainer"] p {
+    font-size: 0.65rem !important;
+    line-height: 1 !important;
+    text-align: center;
+    margin: 0 !important;
+}
 @media (max-width: 480px) {
-  h1 { font-size: 1.3rem !important; }
-  h2 { font-size: 1.1rem !important; }
+  h3 { font-size: 1.15rem !important; }
+  h2 { font-size: 1rem !important; }
 }
 </style>
 """
@@ -93,7 +114,7 @@ def mascara(palabra, letras):
     for c in palabra:
         if c == " ":
             out.append("  ")
-        elif c.upper() in letras_set or not c.isalpha():
+        elif sin_tilde(c.upper()) in letras_set or not c.isalpha():
             out.append(c)
         else:
             out.append("_")
@@ -102,7 +123,7 @@ def mascara(palabra, letras):
 
 def completada(palabra, letras):
     letras_set = set(letras)
-    return all((not c.isalpha()) or c.upper() in letras_set for c in palabra)
+    return all((not c.isalpha()) or sin_tilde(c.upper()) in letras_set for c in palabra)
 
 
 def adivinadores(proponente):
@@ -224,7 +245,7 @@ else:
                             disabled=usada or no_es_mi_turno,
                             use_container_width=True,
                         )
-                        if letra in letras and letra in palabra and letra in quien_letra:
+                        if letra in letras and letra in sin_tilde(palabra) and letra in quien_letra:
                             st.markdown(
                                 f"<p style='text-align:center;margin:0'>{ICONOS.get(quien_letra[letra], '')}</p>",
                                 unsafe_allow_html=True,
@@ -243,7 +264,7 @@ else:
                 ):
                     estado_actual["letras"].append(letra)
                     estado_actual["quien_letra"][letra] = yo
-                    if letra not in estado_actual["palabra"]:
+                    if letra not in sin_tilde(estado_actual["palabra"]):
                         estado_actual["fallos"] += 1
                     dos = adivinadores(estado_actual["proponente"])
                     estado_actual["turno"] = dos[0] if estado_actual["turno"] == dos[1] else dos[1]
